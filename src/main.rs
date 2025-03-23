@@ -1,6 +1,7 @@
+use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound;
-use std::sync::{Arc, Mutex}; // Import Arc and Mutex
+use std::sync::{Arc, Mutex};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host = cpal::default_host();
@@ -13,26 +14,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {}: {}", device_index, device_name);
     }
 
-    let selected_device_index = 0; // Change this if needed
-    let selected_device = devices_vec
-        .get(selected_device_index)
-        .ok_or("Invalid device index")?;
+    if devices_vec.is_empty() {
+        eprintln!("No input devices available.");
+        return Ok(());
+    }
+    let selected_device = if devices_vec.len() == 1 {
+        devices_vec[0].clone()
+    } else {
+        println!("Select a device to capture audio from:");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        // check for empty input
+        if input.trim().is_empty() {
+            eprintln!("No device selected.");
+            return Ok(());
+        }
+        let device_index: usize = input.trim().parse()?;
+        if device_index >= devices_vec.len() {
+            eprintln!("Invalid device index.");
+            return Ok(());
+        }
+        devices_vec[device_index].clone()
+    };
+    println!(
+        "Continuing with default device '{}'",
+        selected_device.name()?
+    );
 
-    let mut supported_configs_range = selected_device.supported_input_configs()?;
-    let config = supported_configs_range
-        .next()
-        .expect("No supported config?!")
+    let config = selected_device
+        .supported_input_configs()?
+        .find(|c| {
+            c.sample_format() == SampleFormat::I16
+                && c.min_sample_rate() <= cpal::SampleRate(48000)
+                && c.max_sample_rate() >= cpal::SampleRate(11025)
+        })
+        .ok_or("No supported I16 configuration at 48000 Hz")?
         .with_sample_rate(cpal::SampleRate(48000))
         .config();
 
-    // Use Arc<Mutex<Vec<i16>>> to share the captured data.
     let captured_data = Arc::new(Mutex::new(Vec::new()));
-    let captured_data_clone = captured_data.clone(); // Clone the Arc for the closure.
+    let captured_data_clone = captured_data.clone();
 
     let stream = selected_device.build_input_stream(
         &config,
         move |data: &[i16], _: &cpal::InputCallbackInfo| {
-            // Lock the Mutex to get exclusive access to the Vec.
             let mut captured_data = captured_data_clone.lock().unwrap();
             captured_data.extend_from_slice(data);
         },
@@ -42,6 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None,
     )?;
 
+    println!("\nPress Enter to start capturing audio...");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
     stream.play()?;
 
     println!("Capturing audio for 5 seconds...");
@@ -49,7 +77,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     stream.pause()?;
 
-    // Lock the Mutex one last time to access the data after the stream is done.
     let captured_data = captured_data.lock().unwrap();
     println!("Captured {} samples.", captured_data.len());
 
@@ -63,14 +90,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut writer = hound::WavWriter::create("recorded_audio.wav", spec)?;
 
-    for sample in captured_data.iter() { // Iterate over the captured data.
-        writer.write_sample(*sample)?; // Dereference the sample.
+    for sample in captured_data.iter() {
+        writer.write_sample(*sample)?;
     }
 
     writer.finalize()?;
     println!("Audio saved to recorded_audio.wav");
 
-    // --- WAV Reading (using hound) ---
     println!("\nReading audio from recorded_audio.wav...");
     let mut reader = hound::WavReader::open("recorded_audio.wav")?;
 
@@ -82,13 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let samples: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
     println!("Read {} samples.", samples.len());
-
-
-
-
-
-
-
 
     /* println!("\nSupported configurations for device '{}':", selected_device.name()?);
     let supported_configs_range = selected_device.supported_input_configs()?;

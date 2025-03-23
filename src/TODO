@@ -1,0 +1,17 @@
+1. More Robust Configuration Selection: The current configuration selection logic just picks the first matching configuration. You could improve this by:
+   - [ ] Presenting a list of all matching configurations to the user and letting them choose.
+   - [ ] Prioritizing configurations with a specific sample rate (e.g., 44100 Hz or 48000 Hz) if multiple configurations match.
+
+2. Dynamic Capture Duration: Instead of a fixed 5-second capture, you could:
+   - [ ] Let the user specify the capture duration as a command-line argument.
+
+3. Error Handling During Capture: The current error handling in the audio callback closure just prints an error message. You could add more sophisticated error handling, such as:
+   - [ ] Stopping the stream gracefully.
+   - [ ] Setting a flag to indicate that an error occurred.
+   - [ ] Displaying a user-friendly error message.
+
+4. Volume Level Indicator (Difficult): 
+   - [ ] This is a more advanced feature, but you could try to display a simple volume level indicator (e.g., a text-based bar graph) while capturing audio. This would involve calculating the amplitude of the audio data in the callback closure.
+
+5. WAV File Naming: 
+   - [ ] Let the user provide a filename for recording.
